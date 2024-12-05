@@ -1,10 +1,10 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
-from sklearn.preprocessing import MinMaxScaler
 
 
 def load_data(file_path):
@@ -48,28 +48,39 @@ def linear_regression_model(df):
     return model, X_test, y_test, y_pred
 
 
-def plot_results(y_test, y_pred):
+def plot_results(y_test, y_pred, stock_name):
     """Plot actual vs predicted stock prices."""
     plt.figure(figsize=(10, 6))
     plt.plot(y_test.index, y_test, label="Actual Prices", color="blue")
     plt.plot(y_test.index, y_pred, label="Predicted Prices", color="red", linestyle="--")
     plt.legend()
-    plt.title("Linear Regression - Actual vs Predicted Stock Prices")
+    plt.title(f"Linear Regression - Actual vs Predicted Stock Prices ({stock_name})")
     plt.xlabel("Date")
     plt.ylabel("Stock Price")
     plt.show()
 
 
+def process_all_stocks(data_dir="data/raw"):
+    """Process all CSV files in the given directory."""
+    # List all CSV files in the directory
+    for filename in os.listdir(data_dir):
+        if filename.endswith(".csv"):
+            file_path = os.path.join(data_dir, filename)
+            print(f"\nProcessing stock data for: {filename}")
+
+            # Load data for the stock
+            series = load_data(file_path)
+
+            # Create lagged features (using the last 5 days)
+            df = create_lagged_features(series, lag=5)
+
+            # Train the Linear Regression model and evaluate it
+            model, X_test, y_test, y_pred = linear_regression_model(df)
+
+            # Plot the results
+            plot_results(y_test, y_pred, stock_name=filename)
+
+
 if __name__ == "__main__":
-    # Load data from CSV file (replace with your file path)
-    file_path = "data/raw/AAPL.csv"  # Change this to your stock data CSV file
-    series = load_data(file_path)
-
-    # Create lagged features (using the last 5 days)
-    df = create_lagged_features(series, lag=5)
-
-    # Train the Linear Regression model and evaluate it
-    model, X_test, y_test, y_pred = linear_regression_model(df)
-
-    # Plot the results
-    plot_results(y_test, y_pred)
+    # Process all stocks in the data directory
+    process_all_stocks(data_dir="data/raw")
