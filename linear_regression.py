@@ -47,8 +47,8 @@ def linear_regression_model(df):
     return model, X_test, y_test, y_pred
 
 
-def generate_synthetic_data(model, last_known_data, num_days=252, lag=45):
-    """Generate synthetic stock prices for 2023 based on the trained model."""
+def generate_synthetic_data(model, last_known_data, num_days=30, lag=45):
+    """Generate synthetic stock prices for first 30 days in 2023 based on the trained model."""
     synthetic_prices = []
     current_data = last_known_data.copy()
 
@@ -103,7 +103,7 @@ def process_portfolio_file(file_path="data/raw-2022/portfolio.csv"):
     # Train the Linear Regression model and evaluate it
     model, X_test, y_test, y_pred = linear_regression_model(df)
 
-    # Generate synthetic data for 1 month (about 20 trading days)
+    # Generate synthetic data for 1 month (about 30 trading days)
     synthetic_data, synthetic_dates = generate_synthetic_data(model, series, num_days=30, lag=45)
 
     # Plot the results
