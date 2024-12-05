@@ -55,7 +55,7 @@ def generate_synthetic_data(model, last_known_data, num_days=252, lag=45):
     # Get the last date of the known data (for example, 2022-12-31)
     last_date = current_data.index[-1]
 
-    for i in range(num_days):  # Generate data for 252 trading days in 2023
+    for i in range(num_days):  # Generate data for 30 trading days in 2023
         # Convert to NumPy array and reshape the last `lag` days
         lagged_features = current_data[-lag:].to_numpy().reshape(1, -1)  # The last `lag` days' data
 
@@ -97,7 +97,7 @@ def process_portfolio_file(file_path="data/raw-2022/portfolio.csv"):
     # Load data for the portfolio
     series = load_data(file_path)
 
-    # Create lagged features (using the last 60 days)
+    # Create lagged features (using the last 45 days)
     df = create_lagged_features(series, lag=45)
 
     # Train the Linear Regression model and evaluate it
