@@ -1,95 +1,87 @@
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 from statsmodels.tsa.arima.model import ARIMA
 from sklearn.metrics import mean_squared_error
-import matplotlib.pyplot as plt
-import numpy as np
-from pmdarima import auto_arima
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
-# Helper Functions
 def load_cleaned_portfolio(file_path):
     """Load the cleaned portfolio data."""
-    return pd.read_csv(file_path, index_col="Date", parse_dates=True)
+    df = pd.read_csv(file_path, index_col="Date", parse_dates=True)
+    # Ensure the index is a DatetimeIndex with a frequency
+    if not df.index.freq:
+        df.index = pd.date_range(start=df.index[0], periods=len(df), freq='B')  # Assume business days
+    return df.squeeze()  # Convert DataFrame to Series if single column
 
 def difference_series(series, d=1):
     """Difference the series to make it stationary."""
     return series.diff(periods=d).dropna()
 
-def optimize_arima(series):
-    """Find the best ARIMA order using auto_arima."""
-    print("Optimizing ARIMA parameters with auto_arima...")
-    stepwise_fit = auto_arima(series,
-                              seasonal=False,  # No seasonality in basic ARIMA
-                              trace=True,      # Display results of each configuration
-                              suppress_warnings=True,
-                              error_action='ignore',
-                              stepwise=True)  # Use a stepwise search for faster results
-    print(f"Optimal ARIMA order: {stepwise_fit.order}")
-    return stepwise_fit.order
+def evaluate_arima(series, p_values, d_values, q_values):
+    """Evaluate ARIMA models with different (p, d, q) parameters."""
+    best_score, best_cfg = float("inf"), None
+    for p in p_values:
+        for d in d_values:
+            for q in q_values:
+                try:
+                    # Fit ARIMA model
+                    model = ARIMA(series, order=(p, d, q))
+                    model_fit = model.fit()
+                    forecast = model_fit.forecast(steps=10)
+                    # Manually align forecast index with the original series
+                    forecast.index = series.index[-len(forecast):]
+                    rmse = np.sqrt(mean_squared_error(series[-10:], forecast))
+                    if rmse < best_score:
+                        best_score, best_cfg = rmse, (p, d, q)
+                    print(f"ARIMA{(p, d, q)} RMSE: {rmse}")
+                except Exception as e:
+                    print(f"ARIMA{(p, d, q)} failed: {e}")
+    print(f"Best ARIMA{best_cfg} RMSE: {best_score}")
+    return best_cfg
 
-def train_arima_model(series, order):
-    """Train the ARIMA model."""
-    model = ARIMA(series, order=order)
-    model_fit = model.fit()
-    print(model_fit.summary())
-    return model_fit
-
-def evaluate_arima_model(model_fit, test_series):
-    """Evaluate the ARIMA model on test data."""
-    forecast = model_fit.forecast(steps=len(test_series))
-    forecast.index = test_series.index  # Align forecast index with test data
-    rmse = np.sqrt(mean_squared_error(test_series, forecast))
-    print(f"RMSE: {rmse}")
-    return forecast, rmse
-
-def plot_forecast(train_series, test_series, forecast):
-    """Plot the train, test, and forecast data."""
+def plot_forecast(series, forecast, title="ARIMA Forecast"):
+    """Plot actual vs forecasted portfolio values."""
+    forecast.index = series.index[-len(forecast):]  # Align forecast index
     plt.figure(figsize=(10, 6))
-    plt.plot(train_series, label="Training Data")
-    plt.plot(test_series, label="Testing Data")
-    plt.plot(forecast, label="Forecast", linestyle="--")
+    plt.plot(series.index, series, label="Actual Portfolio Values", color="blue")
+    plt.plot(forecast.index, forecast, label="Forecast", color="red", linestyle="--")
     plt.legend()
-    plt.title("ARIMA Model Forecast for Portfolio")
+    plt.title(title)
     plt.xlabel("Date")
     plt.ylabel("Portfolio Value")
     plt.show()
 
-# Main Execution
 if __name__ == "__main__":
-    # Configuration
-    portfolio_file = "data/raw/portfolio.csv"  # Path to the cleaned portfolio data
-    test_ratio = 0.2  # 20% of data for testing
-
-    # Load cleaned portfolio data
-    print(f"Loading cleaned portfolio data from {portfolio_file}...")
-    portfolio_data = load_cleaned_portfolio(portfolio_file)
+    # Path to the cleaned portfolio data
+    file_path = "data/raw/portfolio.csv"  # Adjust this to your file path
+    portfolio_data = load_cleaned_portfolio(file_path)
 
     # Extract the portfolio value series
-    portfolio_value = portfolio_data.squeeze()  # Convert to Series if it's a single column
+    portfolio_value = portfolio_data
 
-    # Split into training and testing sets
-    split_idx = int(len(portfolio_value) * (1 - test_ratio))
-    train_series = portfolio_value[:split_idx]
-    test_series = portfolio_value[split_idx:]
+    # Manually differencing the data
+    print("Differencing the series...")
+    portfolio_diff = difference_series(portfolio_value)
 
-    # Ensure proper datetime index
-    train_series.index = pd.to_datetime(train_series.index)
-    test_series.index = pd.to_datetime(test_series.index)
+    # Parameter grid for ARIMA (manual tuning)
+    p_values = range(0, 3)
+    d_values = range(0, 2)
+    q_values = range(0, 3)
 
-    # Stationarity Check and Differencing
-    print("Differencing the training series...")
-    train_series_diff = difference_series(train_series)
+    # Find the best ARIMA parameters
+    print("Evaluating ARIMA models...")
+    best_order = evaluate_arima(portfolio_diff, p_values, d_values, q_values)
 
-    # Find Optimal ARIMA Order
-    optimal_order = optimize_arima(train_series_diff)
+    # Train the best ARIMA model
+    print(f"Training ARIMA model with best order {best_order}...")
+    model = ARIMA(portfolio_diff, order=best_order)
+    model_fit = model.fit()
 
-    # Train ARIMA Model
-    print(f"Training ARIMA model with optimal order {optimal_order}...")
-    model_fit = train_arima_model(train_series_diff, optimal_order)
+    # Forecast future portfolio values
+    forecast = model_fit.forecast(steps=10)
+    forecast.index = portfolio_value.index[-len(forecast):]  # Align forecast index
 
-    # Evaluate the Model
-    print("Evaluating the ARIMA model...")
-    forecast, rmse = evaluate_arima_model(model_fit, test_series)
-
-    # Plot the Forecast
+    # Plot the forecast
     print("Plotting the forecast...")
-    plot_forecast(train_series, test_series, forecast)
+    plot_forecast(portfolio_value, forecast)
