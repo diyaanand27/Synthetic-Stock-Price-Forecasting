@@ -3,7 +3,7 @@
 
 # To Run
 
-**Linear Regression Model** <br/>
+**Linear Regression Model** <br/><br/>
   Run linear_regression_market.py, which uses data/raw-2022/market.csv data <br/>
   You can compare this graphed result to 2023 data by running plot_2023.py, which uses data/raw-2023/market.csv data <br/> <br/>
 
