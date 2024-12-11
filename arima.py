@@ -5,115 +5,128 @@
     @Author: Facus Dokubo-Wizzdom
     Notes: Dat ahas been divided into raw and processed. Processed data has been minimized using MinMaxScaler.
 """
-
 import pandas as pd
-import os
 import numpy as np
+import os
 import matplotlib.pyplot as plt
-import argparse
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
-from sklearn.metrics import mean_squared_error
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
-def load_data(symbol, data_dir= "data/raw"):
-    #Load historical data for symbols
-    file_path = os.path.join(data_dir, f"{symbol}.csv")
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Data file for {symbol} not found in {data_dir}. Please try again")
-    df = pd.read_csv(file_path, index_col="Date", parse_dates=True)
-    return df['Adj Close'].dropna()
+#Use ADF test to check stationarity and improve data for model through differencing
+def make_stationary(series):
 
-#Function to implement a time series model to predict stock prices
-def test_stationary(series):
-    """Using the ADF test to see if a stock is stationary"""
-    result = adfuller(series)
-    print("ADF Statistic:", result[0])
-    print("p-value:", result[1])
-    if result[1] > 0.05:
-        print("The series is not stationary. Differencing is required.")
-        return False
-    print("The series is stationary.")
-    return True
+    d = 0  # Initial differencing order then continue differencing
+    while True:
 
+        result = adfuller(series.dropna())
+        print(f"ADF Statistic: {result[0]}")
+        print(f"p-value: {result[1]}")
+        if result[1] < 0.05:  # If p-value < 0.05, data is stationary
+            print(f"Data is stationary after {d} differencing(s).")
+            break
+        else:
+            print(f"Data is non-stationary. Now applying differencing (d={d + 1})...")
+            series = series.diff().dropna()  # Apply differencing
+            d += 1
+    return series, d
 
-def difference_series(series, d=1):
-    """Difference the series to make it stationary."""
-    return series.diff(periods=d).dropna()
+# Function to train ARIMA model
+def train_arima(series, order):
+    try:
+        model = ARIMA(series, order=order)
+        model_fit = model.fit()
+        return model_fit
+    except Exception as e:
+        print(f"Error training ARIMA: {e}")
+        return None
 
-def train_model(series, order):
-    """Train the ARIMA model."""
-    model = ARIMA(series, order=order)
-    model_fit = model.fit()
-    print(model_fit.summary())
-    return model_fit
+# Main method for ARIMA sequence prediction
+def forecast_arima(model_fit, steps):
+    try:
+        forecast = model_fit.forecast(steps=steps)
+        return forecast
+    except Exception as e:
+        print(f"Error during forecasting: {e}")
+        return None
 
-def evaluate_model(model_fit, test_series):
-    """Evaluate the ARIMA model on test data."""
-    forecast = model_fit.forecast(steps=len(test_series))
-    rmse = np.sqrt(mean_squared_error(test_series, forecast))
-    print(f"RMSE: {rmse}")
-    return forecast, rmse
-
-def plot_forecast(train_series, test_series, forecast):
-    """Plot the train, test, and forecast data."""
-    plt.figure(figsize=(10, 6))
-    plt.plot(train_series, label="Training Data")
-    plt.plot(test_series, label="Testing Data")
-    plt.plot(test_series.index, forecast, label="Forecast", linestyle="--")
-    plt.legend()
-    plt.title("ARIMA Model Forecast")
-    plt.xlabel("Date")
-    plt.ylabel("Stock Price")
-    plt.show()
-
-if __name__ == "__main__":
-    # Default configuration
-    default_symbols = ['AAPL', 'MSFT', 'JANX','PCG', 'PLTR']  # List of stock symbols
-    default_order = (1, 1, 1)  # ARIMA order
-    test_ratio = 0.2
-
-    # Command-line arguments
-    parser = argparse.ArgumentParser(description="ARIMA Model for Stock Price Forecasting")
-    parser.add_argument('-s', '--symbols', nargs='+', default=default_symbols,
-                        help="List of stock symbols (default: ['AAPL', 'JANX','PCG', 'PLTR'])")
-    parser.add_argument('-o', '--order', type=int, nargs=3, default=default_order,
-                        help="ARIMA order (p, d, q), default: (1, 1, 1)")
-    args = parser.parse_args()
-
-    symbols = args.symbols
-    arima_order = tuple(args.order)
-
-    # Loop through each symbol
-    for symbol in symbols:
+# Main function for real vs simulated plot
+def plot_real_vs_simulated(train_data, test_data, stocks):
+    plt.figure(figsize=(14, 8))
+    for stock in stocks:
         try:
-            print(f"\nProcessing symbol: {symbol}")
+            # Remove training and testing data for the stock
+            train_series = train_data[stock]
+            test_series = test_data[stock]
 
-            # Load data
-            series = load_data(symbol)
+            # Make training data stationary
+            stationary_data, d = make_stationary(train_series)
 
-            # Split into training and testing sets
-            split_idx = int(len(series) * (1 - test_ratio))
-            train_series = series[:split_idx]
-            test_series = series[split_idx:]
+            # Train ARIMA model 
+            model = train_arima(stationary_data, order=(1, d, 1))
+            if not model:
+                continue
 
-            # Check for stationarity and preprocess
-            if not test_stationary(train_series):
-                train_series = difference_series(train_series)
+            # Forecast
+            forecast_steps = len(test_series)
+            forecast = forecast_arima(model, steps=forecast_steps)
+            if forecast is None:
+                continue
 
-            # Train ARIMA model
-            print(f"Training ARIMA model for {symbol} with order {arima_order}...")
-            model_fit = train_model(train_series, arima_order)
+            # Combine real and synthetic data
+            simulated_series = pd.Series(forecast, index=test_series.index)
 
-            # Evaluate the model
-            print(f"Evaluating ARIMA model for {symbol}...")
-            forecast, rmse = evaluate_model(model_fit, test_series)
-
-            # Plot the results
-            print(f"Plotting forecast for {symbol}...")
-            plot_forecast(train_series, test_series, forecast)
-
-            # Print RMSE
-            print(f"Symbol: {symbol}, RMSE: {rmse}")
+            # Plot real vs synthetic 
+            plt.plot(train_series.index, train_series, label=f"Real {stock} (Train)", linewidth=0.8)
+            plt.plot(test_series.index, test_series, label=f"Real {stock} (Test)", linewidth=0.8, linestyle="--")
+            plt.plot(simulated_series.index, simulated_series, label=f"Simulated {stock}", linestyle="--")
 
         except Exception as e:
-            print(f"Error processing {symbol}: {e}")
+            print(f"Error processing {stock}: {e}")
+
+    plt.title("Portfolio: Real vs Simulated Stock Prices")
+    plt.xlabel("Date")
+    plt.ylabel("Price")
+    plt.legend(loc="upper left", ncol=2)
+    plt.grid()
+    plt.show()
+
+def load_multiple_files(folder_path, stocks):
+    """
+    Load data into a single DF
+    """
+    combined_data = pd.DataFrame()
+    for stock in stocks:
+        file_path = os.path.join(folder_path, f"{stock}.csv")
+        if not os.path.exists(file_path):
+            print(f"File not found: {file_path}")
+            continue
+        stock_data = pd.read_csv(file_path, index_col="Date", parse_dates=True)
+        stock_data = stock_data[["Adj Close"]]  # Use only the 'Adj Close' column
+        stock_data.rename(columns={"Adj Close": stock}, inplace=True)  # Rename column to stock name
+        if combined_data.empty:
+            combined_data = stock_data
+        else:
+            combined_data = combined_data.join(stock_data, how="outer")  # Merge on the Date index
+    return combined_data
+
+if __name__ == "__main__":
+    # Folder paths for training and testing data
+    train_folder = "./data/raw-2022"  # Update with your training folder path
+    test_folder = "./data/raw-2023"   # Update with your testing folder path
+
+    #load stocks
+    stocks = ['JANX', 'MSFT', 'GOOG', 'PLTR', 'NVDA', 'INTC', 'PCG', 'SMCI', 'CRM', 'IBM']
+
+    # Load training and testing data
+    train_data = load_multiple_files(train_folder, stocks)
+    test_data = load_multiple_files(test_folder, stocks)
+
+    # Fill missing values: fillna is deprecated so use obj.fill or ffill
+    train_data = train_data.asfreq("B").ffill()
+    test_data = test_data.asfreq("B").ffill()
+
+    print("Data loaded succesfully. ARIMA Implementation Complete.")
+    # Plot real vs simulated prices
+    plot_real_vs_simulated(train_data, test_data, stocks)
