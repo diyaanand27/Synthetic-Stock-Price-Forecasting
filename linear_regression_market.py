@@ -90,7 +90,7 @@ def plot_results(y_test, y_pred, actual_data, synthetic_data, synthetic_dates, s
     plt.ylabel("Stock Price")
     plt.show()
 
-def process_portfolio_file(file_path="data/raw-2022/portfolio.csv"):
+def process_portfolio_file(file_path="data/raw-2022/market.csv"):
     """Process a single portfolio CSV file."""
     print(f"\nProcessing stock data for: {file_path}")
 
@@ -111,4 +111,4 @@ def process_portfolio_file(file_path="data/raw-2022/portfolio.csv"):
 
 if __name__ == "__main__":
     # Process the specific portfolio file
-    process_portfolio_file(file_path="data/raw-2022/portfolio.csv")
+    process_portfolio_file(file_path="data/raw-2022/market.csv")
