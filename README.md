@@ -12,11 +12,4 @@
   **ARIMA Model** <br/><br/>
  Run the arima.py file, making sure that all stocks are in the appropriate directories. Training directory is ./data/raw-2022, and testing directory is ./data/raw-2023. each of these should contain data for 10 stocks.
 
-  arima.py <br/>
-  
-  model.py <br/>
-  
-  stock_simu.py <br/>
-  
-
-  
+ 
